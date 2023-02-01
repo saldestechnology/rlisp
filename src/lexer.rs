@@ -112,6 +112,7 @@ mod tests {
         );
     }
 
+    #[test]
     fn test_add_floats() {
         let tokenized = tokenize("(+ (float 1 5) (float 2 6))}");
         assert_eq!(
@@ -128,6 +129,7 @@ mod tests {
                 Keyword("float".to_string()),
                 Integer(2),
                 Integer(6),
+                RP,
                 RP,
             ]
         )
