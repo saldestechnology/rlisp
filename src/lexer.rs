@@ -4,20 +4,12 @@ use std::{io::Error, ops::Add};
 pub enum Token {
     LP,
     RP,
-    Integer(i64),
+    Number(i64),
     Float(f64),
     String(String),
     Operator(String),
     BinaryOperator(String),
     Keyword(String),
-}
-
-fn token_integer(c: &str) -> Option<Token> {
-    if let Ok(i) = c.to_string().parse::<i64>() {
-        Some(Token::Integer(i))
-    } else {
-        None
-    }
 }
 
 fn keyword(input: String) -> Option<Token> {
@@ -35,13 +27,7 @@ fn single_character(input: &str) -> Option<Token> {
         "(" => Some(LP),
         ")" => Some(RP),
         "+" | "-" | "*" | "/" => Some(Operator(input.to_string())),
-        _ => {
-            if let Some(i) = token_integer(input.to_string().as_str()) {
-                Some(i)
-            } else {
-                None
-            }
-        }
+        _ => None,
     }
 }
 
@@ -54,44 +40,62 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, Error> {
         .collect();
     let mut word: Vec<&str> = Vec::new();
     while items.len() > 0 {
-        match items[0] {
-            " " => {
-                // If `word` isn't empty it means we have a keyword under construction.
-                // We assume the keyword is constructed when we reach another whitespace.
-                if !word.is_empty() {
-                    if let Some(keyword) = keyword(word.join("")) {
-                        result.push(keyword);
+        if let Some(c) = items[0].chars().next() {
+            match c {
+                ' ' => {
+                    // If `word` isn't empty it means we have a keyword under construction.
+                    // We assume the keyword is constructed when we reach another whitespace.
+                    if !word.is_empty() {
+                        if let Some(keyword) = keyword(word.join("")) {
+                            result.push(keyword);
+                        }
+                        word.clear();
                     }
-                    word.clear();
-                }
-                items.remove(0);
-            }
-            "\"" => {
-                // A double quote `"` means the beginning of a string.
-                items.remove(0); // Remove first instance of double quote
-                let mut string = String::new();
-                'make_string: loop {
-                    // A string is ended with a double quote `"`
-                    if items[0].contains("\"") {
-                        result.push(Token::String(string));
-                        items.remove(0);
-                        break 'make_string;
-                    } else {
-                        string.push_str(items[0]);
-                        items.remove(0);
-                    }
-                }
-            }
-            _ => match single_character(items[0]) {
-                Some(t) => {
-                    result.push(t);
                     items.remove(0);
                 }
-                None => {
-                    word.push(items[0]);
-                    items.remove(0);
+                '"' => {
+                    // A double quote `"` means the beginning of a string.
+                    items.remove(0); // Remove first instance of double quote
+                    let mut string = String::new();
+                    'make_string: loop {
+                        // A string is ended with a double quote `"`
+                        if items[0].contains("\"") {
+                            result.push(Token::String(string));
+                            items.remove(0);
+                            break 'make_string;
+                        } else {
+                            string.push_str(items[0]);
+                            items.remove(0);
+                        }
+                    }
                 }
-            },
+                '1'..='9' => {
+                    let mut number = String::new();
+                    'make_string: loop {
+                        // A number end with a whitespace ` `
+                        let next = items[0].chars().next().unwrap();
+                        if next.is_digit(10) {
+                            number.push_str(items[0]);
+                            items.remove(0);
+                        } else {
+                            result.push(Token::Number(number.parse::<i64>().unwrap()));
+                            break 'make_string;
+                        }
+                    }
+                }
+                _ => match single_character(items[0]) {
+                    Some(t) => {
+                        result.push(t);
+                        items.remove(0);
+                    }
+                    None => {
+                        word.push(items[0]);
+                        items.remove(0);
+                    }
+                },
+            }
+        } else {
+            panic!("Unable to parse character.")
         }
     }
     Ok(result)
@@ -108,7 +112,7 @@ mod tests {
         let tokenized = tokenize("(+ 1 2)");
         assert_eq!(
             tokenized.unwrap(),
-            vec![LP, Operator("+".to_string()), Integer(1), Integer(2), RP]
+            vec![LP, Operator("+".to_string()), Number(1), Number(2), RP]
         )
     }
 
@@ -117,13 +121,23 @@ mod tests {
         let tokenized = tokenize("(- 1 2)");
         assert_eq!(
             tokenized.unwrap(),
-            vec![LP, Operator("-".to_string()), Integer(1), Integer(2), RP]
+            vec![LP, Operator("-".to_string()), Number(1), Number(2), RP]
         )
     }
 
     #[test]
-    fn test_integer() {
-        assert_eq!(token_integer("128"), Some(Integer(128)));
+    fn test_multi_digit_number() {
+        let tokenized = tokenize("(+ 123456789 99999)");
+        assert_eq!(
+            tokenized.unwrap(),
+            vec![
+                LP,
+                Operator("+".to_string()),
+                Number(123456789),
+                Number(99999),
+                RP
+            ]
+        );
     }
 
     /// Floating points
@@ -132,7 +146,22 @@ mod tests {
         let tokenzied = tokenize("(float 1 5)");
         assert_eq!(
             tokenzied.unwrap(),
-            vec![LP, Keyword("float".to_string()), Integer(1), Integer(5), RP]
+            vec![LP, Keyword("float".to_string()), Number(1), Number(5), RP]
+        );
+    }
+
+    #[test]
+    fn test_multi_digit_decimal() {
+        let tokenzied = tokenize("(float 1 564738)");
+        assert_eq!(
+            tokenzied.unwrap(),
+            vec![
+                LP,
+                Keyword("float".to_string()),
+                Number(1),
+                Number(564738),
+                RP
+            ]
         );
     }
 
@@ -146,13 +175,13 @@ mod tests {
                 Operator("+".to_string()),
                 LP,
                 Keyword("float".to_string()),
-                Integer(1),
-                Integer(5),
+                Number(1),
+                Number(5),
                 RP,
                 LP,
                 Keyword("float".to_string()),
-                Integer(2),
-                Integer(6),
+                Number(2),
+                Number(6),
                 RP,
                 RP,
             ]
