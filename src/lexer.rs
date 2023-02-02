@@ -1,4 +1,4 @@
-use std::io::Error;
+use std::{io::Error, ops::Add};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -20,10 +20,11 @@ fn token_integer(c: &str) -> Option<Token> {
     }
 }
 
-fn keyword(input: &str) -> Option<Token> {
+fn keyword(input: String) -> Option<Token> {
     use Token::*;
-    match input {
+    match input.as_str() {
         "float" => Some(Keyword("float".to_string())),
+        "print" => Some(Keyword("print".to_string())),
         _ => None,
     }
 }
@@ -53,14 +54,35 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, Error> {
         .collect();
     let mut word: Vec<&str> = Vec::new();
     while items.len() > 0 {
-        if items[0].trim().is_empty() {
-            if !word.is_empty() {
-                result.push(keyword(word.join("").to_string().as_str()).unwrap());
-                word.clear();
+        match items[0] {
+            " " => {
+                // If `word` isn't empty it means we have a keyword under construction.
+                // We assume the keyword is constructed when we reach another whitespace.
+                if !word.is_empty() {
+                    if let Some(keyword) = keyword(word.join("")) {
+                        result.push(keyword);
+                    }
+                    word.clear();
+                }
+                items.remove(0);
             }
-            items.remove(0);
-        } else {
-            match single_character(items[0]) {
+            "\"" => {
+                // A double quote `"` means the beginning of a string.
+                items.remove(0); // Remove first instance of double quote
+                let mut string = String::new();
+                'make_string: loop {
+                    // A string is ended with a double quote `"`
+                    if items[0].contains("\"") {
+                        result.push(Token::String(string));
+                        items.remove(0);
+                        break 'make_string;
+                    } else {
+                        string.push_str(items[0]);
+                        items.remove(0);
+                    }
+                }
+            }
+            _ => match single_character(items[0]) {
                 Some(t) => {
                     result.push(t);
                     items.remove(0);
@@ -69,7 +91,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, Error> {
                     word.push(items[0]);
                     items.remove(0);
                 }
-            }
+            },
         }
     }
     Ok(result)
@@ -80,6 +102,7 @@ mod tests {
     use super::*;
     use Token::*;
 
+    /// Integer
     #[test]
     fn test_addition() {
         let tokenized = tokenize("(+ 1 2)");
@@ -103,6 +126,7 @@ mod tests {
         assert_eq!(token_integer("128"), Some(Integer(128)));
     }
 
+    /// Floating points
     #[test]
     fn test_float() {
         let tokenzied = tokenize("(float 1 5)");
@@ -133,5 +157,20 @@ mod tests {
                 RP,
             ]
         )
+    }
+
+    /// print
+    #[test]
+    fn test_print_hello_world() {
+        let tokenized = tokenize("(print \"Hello, world!\")");
+        assert_eq!(
+            tokenized.unwrap(),
+            vec![
+                LP,
+                Keyword("print".to_string()),
+                String("Hello, world!".to_string()),
+                RP
+            ]
+        );
     }
 }
