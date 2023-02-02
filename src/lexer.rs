@@ -1,4 +1,4 @@
-use std::{io::Error, ops::Add};
+use std::io::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
