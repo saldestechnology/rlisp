@@ -1,30 +1,21 @@
 use libc::{c_int, tcgetattr, tcsetattr, termios, ECHO, ICANON, TCSANOW};
-use std::io::{self, Read, Write};
-use std::os::unix::io::AsRawFd;
+use std::io::{Read, Write};
 
-pub struct Terminal {
-    stdin: io::Stdin,
-    stdout: io::Stdout,
+pub struct Terminal<R: Read, W: Write> {
+    stdin: R,
+    stdout: W,
+    stdin_fd: c_int,
     original_termios: termios,
     buffer: String,
     cursor_pos: usize,
 }
 
-impl Terminal {
-    pub fn new() -> Terminal {
-        let stdin = io::stdin();
-        let stdout = io::stdout();
-        let stdin_fd = stdin.as_raw_fd();
-
-        let original_termios = unsafe {
-            let mut termios: termios = std::mem::zeroed();
-            tcgetattr(stdin_fd, &mut termios as *mut _);
-            termios
-        };
-
+impl<R: Read, W: Write> Terminal<R, W> {
+    pub fn new(stdin: R, stdout: W, stdin_fd: c_int, original_termios: termios) -> Terminal<R, W> {
         Terminal {
             stdin,
             stdout,
+            stdin_fd,
             original_termios,
             buffer: String::new(),
             cursor_pos: 0,
@@ -32,15 +23,18 @@ impl Terminal {
     }
 
     pub fn enable_raw_mode(&mut self) {
-        let stdin_fd = self.stdin.as_raw_fd();
-        let mut raw_termios = self.original_termios.clone();
-        raw_termios.c_lflag &= !(ECHO as libc::tcflag_t | ICANON as libc::tcflag_t);
-        unsafe { tcsetattr(stdin_fd, TCSANOW, &raw_termios as *const _) };
+        let mut new_termios = self.original_termios;
+        new_termios.c_lflag &= !(ECHO | ICANON);
+
+        unsafe {
+            tcsetattr(self.stdin_fd, TCSANOW, &new_termios as *const _);
+        }
     }
 
     pub fn disable_raw_mode(&mut self) {
-        let stdin_fd = self.stdin.as_raw_fd();
-        unsafe { tcsetattr(stdin_fd, TCSANOW, &self.original_termios as *const _) };
+        unsafe {
+            tcsetattr(self.stdin_fd, TCSANOW, &self.original_termios as *const _);
+        }
     }
 
     fn handle_key_event(&mut self, key: u8) {
