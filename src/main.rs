@@ -4,6 +4,7 @@ use repl::Terminal;
 use libc::{c_int, tcgetattr, tcsetattr, termios, ECHO, ICANON, TCSANOW};
 use std::io::{self, stdin, stdout};
 use std::os::unix::io::AsRawFd;
+
 fn main() {
     let stdin = stdin();
     let stdout = stdout();

@@ -1,205 +1,167 @@
 use std::io::Error;
+use std::iter::Peekable;
+use std::str::Chars;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    LP,
-    RP,
-    Number(i64),
+    OpenParen,
+    CloseParen,
+    Integer(i64),
     Float(f64),
     String(String),
-    Operator(String),
-    BinaryOperator(String),
     Keyword(String),
+    Symbol(String),
+    Quote,
 }
 
-fn keyword(input: String) -> Option<Token> {
-    use Token::*;
-    match input.as_str() {
-        "float" => Some(Keyword("float".to_string())),
-        "print" => Some(Keyword("print".to_string())),
-        _ => None,
-    }
+pub struct Tokenizer<'a> {
+    input: Peekable<Chars<'a>>,
 }
 
-fn single_character(input: &str) -> Option<Token> {
-    use Token::*;
-    match input {
-        "(" => Some(LP),
-        ")" => Some(RP),
-        "+" | "-" | "*" | "/" => Some(Operator(input.to_string())),
-        _ => None,
-    }
-}
-
-pub fn tokenize(input: &str) -> Result<Vec<Token>, Error> {
-    let mut result: Vec<Token> = Vec::new();
-    let mut items: Vec<&str> = input
-        .split("")
-        .into_iter()
-        .filter(|i| !i.is_empty())
-        .collect();
-    let mut word: Vec<&str> = Vec::new();
-    while items.len() > 0 {
-        if let Some(c) = items[0].chars().next() {
-            match c {
-                ' ' => {
-                    // If `word` isn't empty it means we have a keyword under construction.
-                    // We assume the keyword is constructed when we reach another whitespace.
-                    if !word.is_empty() {
-                        if let Some(keyword) = keyword(word.join("")) {
-                            result.push(keyword);
-                        }
-                        word.clear();
-                    }
-                    items.remove(0);
-                }
-                '"' => {
-                    // A double quote `"` means the beginning of a string.
-                    items.remove(0); // Remove first instance of double quote
-                    let mut string = String::new();
-                    'make_string: loop {
-                        // A string is ended with a double quote `"`
-                        if items[0].contains("\"") {
-                            result.push(Token::String(string));
-                            items.remove(0);
-                            break 'make_string;
-                        } else {
-                            string.push_str(items[0]);
-                            items.remove(0);
-                        }
-                    }
-                }
-                '1'..='9' => {
-                    let mut number = String::new();
-                    'make_string: loop {
-                        // A number end with a whitespace ` `
-                        let next = items[0].chars().next().unwrap();
-                        if next.is_digit(10) {
-                            number.push_str(items[0]);
-                            items.remove(0);
-                        } else {
-                            result.push(Token::Number(number.parse::<i64>().unwrap()));
-                            break 'make_string;
-                        }
-                    }
-                }
-                _ => match single_character(items[0]) {
-                    Some(t) => {
-                        result.push(t);
-                        items.remove(0);
-                    }
-                    None => {
-                        word.push(items[0]);
-                        items.remove(0);
-                    }
-                },
-            }
-        } else {
-            panic!("Unable to parse character.")
+impl<'a> Tokenizer<'a> {
+    pub fn new(input: &'a str) -> Self {
+        Tokenizer {
+            input: input.chars().peekable(),
         }
     }
-    Ok(result)
+
+    fn skip_whitespace(&mut self) {
+        while let Some(&ch) = self.input.peek() {
+            if ch.is_whitespace() {
+                self.input.next();
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn parse_string(&mut self) -> Token {
+        let mut string = String::new();
+        while let Some(ch) = self.input.next() {
+            match ch {
+                '\\' => {
+                    if let Some(escaped) = self.input.next() {
+                        string.push(escaped);
+                    }
+                }
+                '"' => break,
+                _ => string.push(ch),
+            }
+        }
+        Token::String(string)
+    }
+
+    fn parse_number(&mut self, first: char) -> Token {
+        let mut n = first.to_string();
+        let mut has_dot = first == '.';
+        while let Some(&ch) = self.input.peek() {
+            if ch == '.' && !has_dot {
+                has_dot = true;
+                n.push(self.input.next().unwrap());
+            } else if ch.is_digit(10) {
+                n.push(self.input.next().unwrap());
+            } else {
+                break;
+            }
+        }
+        if has_dot {
+            Token::Float(n.parse().unwrap())
+        } else {
+            Token::Integer(n.parse().unwrap())
+        }
+    }
+
+    fn is_symbol(&self, ch: char) -> bool {
+        return ch.is_alphanumeric()
+            || ch == '-'
+            || ch == '_'
+            || ch == '+'
+            || ch == '*'
+            || ch == '/'
+            || ch == '<'
+            || ch == '>'
+            || ch == '='
+            || ch == '!'
+            || ch == '?'
+            || ch == '&'
+            || ch == ':'
+            || ch == '.';
+    }
+
+    fn read_symbol(&mut self, first: char) -> Token {
+        let mut symbol = first.to_string();
+        while let Some(&ch) = self.input.peek() {
+            if self.is_symbol(ch) {
+                symbol.push(self.input.next().unwrap());
+            } else {
+                break;
+            }
+        }
+
+        if symbol.starts_with(':') {
+            return Token::Keyword(symbol[1..].to_string());
+        }
+        Token::Symbol(symbol)
+    }
+
+    fn read_comment(&mut self) {
+        while let Some(ch) = self.input.next() {
+            if ch == '\n' {
+                break;
+            }
+        }
+    }
+}
+
+impl<'a> Iterator for Tokenizer<'a> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.skip_whitespace();
+
+        match self.input.next()? {
+            '(' => Some(Token::OpenParen),
+            ')' => Some(Token::CloseParen),
+            '"' => Some(self.parse_string()),
+            ch @ '1'..='9' => Some(self.parse_number(ch)),
+            ';' => {
+                self.read_comment();
+                self.next()
+            }
+            ch if self.is_symbol(ch) => Some(self.read_symbol(ch)),
+            '\'' => Some(Token::Quote),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use Token::*;
 
     /// Integer
     #[test]
     fn test_addition() {
-        let tokenized = tokenize("(+ 1 2)");
-        assert_eq!(
-            tokenized.unwrap(),
-            vec![LP, Operator("+".to_string()), Number(1), Number(2), RP]
-        )
-    }
+        let input = "(+ 1 2.0 (- 3 4) 'foo :keyword \"string\" ; comment\n)";
+        let mut tokenizer = Tokenizer::new(input);
 
-    #[test]
-    fn test_subtraction() {
-        let tokenized = tokenize("(- 1 2)");
+        assert_eq!(tokenizer.next(), Some(Token::OpenParen));
+        assert_eq!(tokenizer.next(), Some(Token::Symbol("+".to_string())));
+        assert_eq!(tokenizer.next(), Some(Token::Integer(1)));
+        assert_eq!(tokenizer.next(), Some(Token::Float(2.0)));
+        assert_eq!(tokenizer.next(), Some(Token::OpenParen));
+        assert_eq!(tokenizer.next(), Some(Token::Symbol("-".to_string())));
+        assert_eq!(tokenizer.next(), Some(Token::Integer(3)));
+        assert_eq!(tokenizer.next(), Some(Token::Integer(4)));
+        assert_eq!(tokenizer.next(), Some(Token::CloseParen));
+        assert_eq!(tokenizer.next(), Some(Token::Quote));
+        assert_eq!(tokenizer.next(), Some(Token::Symbol("foo".to_string())));
         assert_eq!(
-            tokenized.unwrap(),
-            vec![LP, Operator("-".to_string()), Number(1), Number(2), RP]
-        )
-    }
-
-    #[test]
-    fn test_multi_digit_number() {
-        let tokenized = tokenize("(+ 123456789 99999)");
-        assert_eq!(
-            tokenized.unwrap(),
-            vec![
-                LP,
-                Operator("+".to_string()),
-                Number(123456789),
-                Number(99999),
-                RP
-            ]
+            tokenizer.next(),
+            Some(Token::Keyword("keyword".to_string()))
         );
-    }
-
-    /// Floating points
-    #[test]
-    fn test_float() {
-        let tokenzied = tokenize("(float 1 5)");
-        assert_eq!(
-            tokenzied.unwrap(),
-            vec![LP, Keyword("float".to_string()), Number(1), Number(5), RP]
-        );
-    }
-
-    #[test]
-    fn test_multi_digit_decimal() {
-        let tokenzied = tokenize("(float 1 564738)");
-        assert_eq!(
-            tokenzied.unwrap(),
-            vec![
-                LP,
-                Keyword("float".to_string()),
-                Number(1),
-                Number(564738),
-                RP
-            ]
-        );
-    }
-
-    #[test]
-    fn test_add_floats() {
-        let tokenized = tokenize("(+ (float 1 5) (float 2 6))}");
-        assert_eq!(
-            tokenized.unwrap(),
-            vec![
-                LP,
-                Operator("+".to_string()),
-                LP,
-                Keyword("float".to_string()),
-                Number(1),
-                Number(5),
-                RP,
-                LP,
-                Keyword("float".to_string()),
-                Number(2),
-                Number(6),
-                RP,
-                RP,
-            ]
-        )
-    }
-
-    /// print
-    #[test]
-    fn test_print_hello_world() {
-        let tokenized = tokenize("(print \"Hello, world!\")");
-        assert_eq!(
-            tokenized.unwrap(),
-            vec![
-                LP,
-                Keyword("print".to_string()),
-                String("Hello, world!".to_string()),
-                RP
-            ]
-        );
+        assert_eq!(tokenizer.next(), Some(Token::String("string".to_string())));
+        assert_eq!(tokenizer.next(), Some(Token::CloseParen));
+        assert_eq!(tokenizer.next(), None);
     }
 }
