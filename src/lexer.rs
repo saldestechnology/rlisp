@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::io::Error;
 use std::iter::Peekable;
 use std::str::Chars;
@@ -14,6 +15,22 @@ pub enum Token {
     Quote,
 }
 
+impl Display for Token {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> std::fmt::Result {
+        use Token::*;
+        match &self {
+            OpenParen => write!(fmt, "("),
+            CloseParen => write!(fmt, ")"),
+            Integer(i) => write!(fmt, "{}", i),
+            Float(f) => write!(fmt, "{}", f),
+            String(s) => write!(fmt, "{}", s),
+            Keyword(s) => write!(fmt, "{}", s),
+            Symbol(s) => write!(fmt, "{}", s),
+            Quote => write!(fmt, "\""),
+        }
+    }
+}
+
 pub struct Tokenizer<'a> {
     input: Peekable<Chars<'a>>,
 }
@@ -23,6 +40,14 @@ impl<'a> Tokenizer<'a> {
         Tokenizer {
             input: input.chars().peekable(),
         }
+    }
+
+    pub fn all_to_string(&mut self) -> String {
+        let mut s = "".to_string();
+        while let Some(token) = self.next() {
+            s.push_str(&token.to_string());
+        }
+        return s;
     }
 
     fn skip_whitespace(&mut self) {
@@ -137,7 +162,15 @@ impl<'a> Iterator for Tokenizer<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::lexer::Token::String;
     use super::*;
+
+    #[test]
+    fn test_addition_short() {
+        let input = "(+ 1 2.0 (- 3 4) 'foo :keyword \"string\" ; comment\n)";
+        let mut tokenizer = Tokenizer::new(input);
+        assert_eq!("(+12(-34)\"fookeywordstring)", tokenizer.all_to_string());
+    }
 
     /// Integer
     #[test]
