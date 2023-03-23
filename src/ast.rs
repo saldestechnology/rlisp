@@ -1,3 +1,7 @@
+use std::iter::Peekable;
+
+use crate::lexer::Token;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Integer(i64),
@@ -69,6 +73,11 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod test {
+    use crate::{
+        ast::{Expr, Parser},
+        lexer::Token,
+    };
+
     #[test]
     fn test_parse_integer() {
         let tokens = vec![Token::Integer(1)];
@@ -79,31 +88,38 @@ mod test {
 
     #[test]
     fn test_parse() {
+        let tokens = vec![
+            Token::OpenParen,
+            Token::Symbol("+".to_string()),
+            Token::Integer(1),
+            Token::Float(2.0),
+            Token::OpenParen,
+            Token::Symbol("-".to_string()),
+            Token::Integer(3),
+            Token::Integer(4),
+            Token::CloseParen,
+            Token::Quote,
+            Token::Symbol("foo".to_string()),
+            Token::Keyword("keyword".to_string()),
+            Token::String("string".to_string()),
+            Token::CloseParen,
+        ];
+        let mut parser = Parser::new(&tokens);
+        let expr = parser.parse().unwrap();
         assert_eq!(
-            let tokens = vec![
-                Token::OpenParen,
-                Token::Symbol("+".to_string()),
-                Token::Integer(1),
-                Token::Float(2.0),
-                Token::OpenParen,
-                Token::Symbol("-".to_string()),
-                Token::Integer(3),
-                Token::Integer(4),
-                Token::CloseParen,
-                Token::Quote,
-                Token::Symbol("foo".to_string()),
-                Token::Keyword("keyword".to_string()),
-                Token::String("string".to_string()),
-                Token::CloseParen,
-            ];
-            Expr::List([
-                Expr::Symbol("+"),
+            expr,
+            Expr::List(vec![
+                Expr::Symbol("+".to_string()),
                 Expr::Integer(1),
                 Expr::Float(2.0),
-                Expr::List([Expr::Symbol("-"), Expr::Integer(3), Expr::Integer(4)]),
-                Expr::Quote(Symbol("foo")),
-                Expr::Keyword("keyword"),
-                Expr::String("string")
+                Expr::List(vec![
+                    Expr::Symbol("-".to_string()),
+                    Expr::Integer(3),
+                    Expr::Integer(4)
+                ]),
+                Expr::Quote(Box::new(Expr::Symbol("foo".to_string()))),
+                Expr::Keyword("keyword".to_string()),
+                Expr::String("string".to_string())
             ])
         )
     }

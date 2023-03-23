@@ -1,5 +1,4 @@
 use std::fmt::{Display, Formatter};
-use std::io::Error;
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -162,8 +161,8 @@ impl<'a> Iterator for Tokenizer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::lexer::Token::String;
     use super::*;
+    use crate::lexer::Token::String;
 
     #[test]
     fn test_addition_short() {
