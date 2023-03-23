@@ -165,7 +165,7 @@ mod tests {
     use crate::lexer::Token::String;
 
     #[test]
-    fn test_addition_short() {
+    fn test_string_to_token_short() {
         let input = "(+ 1 2.0 (- 3 4) 'foo :keyword \"string\" ; comment\n)";
         let mut tokenizer = Tokenizer::new(input);
         assert_eq!("(+12(-34)\"fookeywordstring)", tokenizer.all_to_string());
@@ -173,7 +173,7 @@ mod tests {
 
     /// Integer
     #[test]
-    fn test_addition() {
+    fn test_string_to_iter() {
         let input = "(+ 1 2.0 (- 3 4) 'foo :keyword \"string\" ; comment\n)";
         let mut tokenizer = Tokenizer::new(input);
 
