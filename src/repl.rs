@@ -1,6 +1,34 @@
 use libc::{c_int, tcgetattr, tcsetattr, termios, ECHO, ICANON, TCSANOW};
 use std::io::{Read, Write};
 
+trait IntoRaw {
+    fn enable_raw_mode(&mut self) -> ();
+    fn disable_raw_mode(&mut self) -> ();
+}
+
+/**
+ * Moving enable_raw_mode and disable_raw_mode to a trait
+ * I've heard it's possible to accomplish raw mode without libc
+ * but I'm not sure how to do that.
+ * But this way it should be easy enough to replace libc with something else.
+ */
+impl<R: Read, W: Write> IntoRaw for Terminal<R, W> {
+    fn enable_raw_mode(&mut self) {
+        let mut new_termios = self.original_termios;
+        new_termios.c_lflag &= !(ECHO | ICANON);
+
+        unsafe {
+            tcsetattr(self.stdin_fd, TCSANOW, &new_termios as *const _);
+        }
+    }
+
+    fn disable_raw_mode(&mut self) {
+        unsafe {
+            tcsetattr(self.stdin_fd, TCSANOW, &self.original_termios as *const _);
+        }
+    }
+}
+
 pub struct Terminal<R: Read, W: Write> {
     stdin: R,
     stdout: W,
@@ -19,21 +47,6 @@ impl<R: Read, W: Write> Terminal<R, W> {
             original_termios,
             buffer: String::new(),
             cursor_pos: 0,
-        }
-    }
-
-    pub fn enable_raw_mode(&mut self) {
-        let mut new_termios = self.original_termios;
-        new_termios.c_lflag &= !(ECHO | ICANON);
-
-        unsafe {
-            tcsetattr(self.stdin_fd, TCSANOW, &new_termios as *const _);
-        }
-    }
-
-    pub fn disable_raw_mode(&mut self) {
-        unsafe {
-            tcsetattr(self.stdin_fd, TCSANOW, &self.original_termios as *const _);
         }
     }
 
@@ -99,7 +112,7 @@ impl<R: Read, W: Write> Terminal<R, W> {
     }
 
     pub fn run(&mut self) {
-        self.enable_raw_mode();
+        IntoRaw::enable_raw_mode(self);
         loop {
             let mut buf = [0u8; 1];
             let read_bytes = self.stdin.read(&mut buf).unwrap();
@@ -109,6 +122,6 @@ impl<R: Read, W: Write> Terminal<R, W> {
                 self.handle_key_event(buf[0]);
             }
         }
-        self.disable_raw_mode();
+        IntoRaw::disable_raw_mode(self);
     }
 }
