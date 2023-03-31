@@ -1,5 +1,32 @@
-use libc::{c_int, tcgetattr, tcsetattr, termios, ECHO, ICANON, TCSANOW};
+use libc::{c_int, tcsetattr, termios, ECHO, ICANON, TCSANOW};
 use std::io::{Read, Write};
+use std::process;
+
+trait HandleKeyEvent {
+    fn handle_key_event(&mut self, key: u8) -> ();
+}
+
+impl<R: Read, W: Write> HandleKeyEvent for Terminal<R, W> {
+    fn handle_key_event(&mut self, key: u8) {
+        match key {
+            b'\x1b' => {
+                let mut buf = [0u8; 2];
+                let _ = self.stdin.read(&mut buf);
+                if buf[0] == b'[' {
+                    match buf[1] {
+                        b'C' => self.move_cursor_right(),
+                        b'D' => self.move_cursor_left(),
+                        _ => (),
+                    }
+                } else {
+                    self.exit();
+                }
+            }
+            0x7f => self.backspace(),
+            _ => self.insert_char(key as char),
+        }
+    }
+}
 
 trait IntoRaw {
     fn enable_raw_mode(&mut self) -> ();
@@ -50,24 +77,6 @@ impl<R: Read, W: Write> Terminal<R, W> {
         }
     }
 
-    fn handle_key_event(&mut self, key: u8) {
-        match key {
-            b'\x1b' => {
-                let mut buf = [0u8; 2];
-                let _ = self.stdin.read(&mut buf);
-                if buf[0] == b'[' {
-                    match buf[1] {
-                        b'C' => self.move_cursor_right(),
-                        b'D' => self.move_cursor_left(),
-                        _ => (),
-                    }
-                }
-            }
-            0x7f => self.backspace(),
-            _ => self.insert_char(key as char),
-        }
-    }
-
     fn move_cursor_right(&mut self) {
         if self.cursor_pos < self.buffer.len() {
             self.cursor_pos += 1;
@@ -111,17 +120,20 @@ impl<R: Read, W: Write> Terminal<R, W> {
         }
     }
 
+    fn exit(&mut self) {
+        self.stdout.write_all(b"\x1b[2J").unwrap();
+        self.stdout.write_all(b"\x1b[H").unwrap();
+        self.stdout.flush().unwrap();
+        IntoRaw::disable_raw_mode(self);
+        process::exit(0);
+    }
+
     pub fn run(&mut self) {
         IntoRaw::enable_raw_mode(self);
         loop {
             let mut buf = [0u8; 1];
-            let read_bytes = self.stdin.read(&mut buf).unwrap();
-            if buf[0] == b'q' {
-                break;
-            } else {
-                self.handle_key_event(buf[0]);
-            }
+            let _read_bytes = self.stdin.read(&mut buf).unwrap();
+            HandleKeyEvent::handle_key_event(self, buf[0]);
         }
-        IntoRaw::disable_raw_mode(self);
     }
 }
