@@ -96,7 +96,7 @@ mod test {
             Token::OpenParen,
             Token::Symbol("-".to_string()),
             Token::Integer(3),
-            Token::Integer(4),
+            Token::Integer(42),
             Token::CloseParen,
             Token::Quote,
             Token::Symbol("foo".to_string()),
@@ -115,7 +115,7 @@ mod test {
                 Expr::List(vec![
                     Expr::Symbol("-".to_string()),
                     Expr::Integer(3),
-                    Expr::Integer(4)
+                    Expr::Integer(42)
                 ]),
                 Expr::Quote(Box::new(Expr::Symbol("foo".to_string()))),
                 Expr::Keyword("keyword".to_string()),
