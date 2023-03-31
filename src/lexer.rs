@@ -1,5 +1,4 @@
 use std::fmt::{Display, Formatter};
-use std::io::Error;
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -162,20 +161,20 @@ impl<'a> Iterator for Tokenizer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::lexer::Token::String;
     use super::*;
+    use crate::lexer::Token::String;
 
     #[test]
-    fn test_addition_short() {
-        let input = "(+ 1 2.0 (- 3 4) 'foo :keyword \"string\" ; comment\n)";
+    fn test_string_to_token_short() {
+        let input = "(+ 1 2.0 (- 3 42) 'foo :keyword \"string\" ; comment\n)";
         let mut tokenizer = Tokenizer::new(input);
-        assert_eq!("(+12(-34)\"fookeywordstring)", tokenizer.all_to_string());
+        assert_eq!("(+12(-342)\"fookeywordstring)", tokenizer.all_to_string()); // TODO: This should do round trip
     }
 
     /// Integer
     #[test]
-    fn test_addition() {
-        let input = "(+ 1 2.0 (- 3 4) 'foo :keyword \"string\" ; comment\n)";
+    fn test_string_to_iter() {
+        let input = "(+ 1 2.0 (- 3 42) 'foo :keyword \"string\" ; comment\n)";
         let mut tokenizer = Tokenizer::new(input);
 
         assert_eq!(tokenizer.next(), Some(Token::OpenParen));
@@ -185,7 +184,7 @@ mod tests {
         assert_eq!(tokenizer.next(), Some(Token::OpenParen));
         assert_eq!(tokenizer.next(), Some(Token::Symbol("-".to_string())));
         assert_eq!(tokenizer.next(), Some(Token::Integer(3)));
-        assert_eq!(tokenizer.next(), Some(Token::Integer(4)));
+        assert_eq!(tokenizer.next(), Some(Token::Integer(42)));
         assert_eq!(tokenizer.next(), Some(Token::CloseParen));
         assert_eq!(tokenizer.next(), Some(Token::Quote));
         assert_eq!(tokenizer.next(), Some(Token::Symbol("foo".to_string())));
